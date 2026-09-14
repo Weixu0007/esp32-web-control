@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ESP32 跨区域控制台</title>
+    <!-- 使用推荐的 Cloudflare CDN 引入 Paho MQTT 库 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.1.0/paho-mqtt.min.js"></script>
+    <style>
+        body { font-family: sans-serif; background-color: #0f172a; color: #f8fafc; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; }
+        .card { background: #1e293b; padding: 2rem; border-radius: 1rem; text-align: center; width: 300px; border: 1px solid #334155; }
+        h2 { margin-top: 0; color: #38bdf8; }
+        .status { padding: 0.25rem 0.75rem; border-radius: 999px; font-size: 0.85rem; margin-bottom: 1.5rem; display: inline-block; background: #475569; }
+        .btn-group { display: flex; gap: 10px; margin-bottom: 1rem; }
+        button { flex: 1; padding: 12px; font-weight: bold; border: none; border-radius: 6px; cursor: pointer; color: white; }
+        .btn-on { background-color: #10b981; }
+        .btn-off { background-color: #ef4444; }
+        .log-box { background: #0f172a; padding: 8px; font-family: monospace; font-size: 0.75rem; text-align: left; height: 80px; overflow-y: auto; color: #94a3b8; border-radius: 4px; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h2>ESP32 异地远程控制</h2>
+        <div id="status" class="status">正在连接云端...</div>
+        
+        <div class="btn-group">
+            <button class="btn-on" onclick="sendCmd('ON')">开启</button>
+            <button class="btn-off" onclick="sendCmd('OFF')">关闭</button>
+        </div>
+
+        <div class="log-box" id="logs">> 初始化...<br></div>
+    </div>
+
+    <script>
+        const statusEl = document.getElementById("status");
+        const logsEl = document.getElementById("logs");
+
+        function log(msg) {
+            logsEl.innerHTML += `> ${msg}<br>`;
+            logsEl.scrollTop = logsEl.scrollHeight;
+        }
+
+        // 使用 Paho MQTT 库建立 WebSocket 加密连接
+        const clientId = "Web_" + Math.random().toString(16).substring(2, 8);
+        const client = new Paho.MQTT.Client("broker.emqx.io", 8084, "/mqtt", clientId);
+        const topic = "myhouse/esp32/control";
+
+        client.onConnectionLost = function (responseObject) {
+            statusEl.innerText = "连接断开";
+            statusEl.style.background = "#991b1b";
+            log("连接丢失: " + responseObject.errorMessage);
+        };
+
+        client.onMessageArrived = function (message) {
+            log("收到反馈: " + message.payloadString);
+        };
+
+        client.connect({
+            useSSL: true, // 使用 HTTPS 页面必须开启 SSL (wss://)
+            onSuccess: function () {
+                statusEl.innerText = "已连通云端服务器";
+                statusEl.style.background = "#065f46";
+                log("成功连接至 EMQX 中转站");
+            },
+            onFailure: function (err) {
+                statusEl.innerText = "连接失败";
+                statusEl.style.background = "#991b1b";
+                log("连接失败: " + err.errorMessage);
+            }
+        });
+
+        function sendCmd(cmd) {
+            if (client.isConnected()) {
+                const message = new Paho.MQTT.Message(cmd);
+                message.destinationName = topic;
+                client.send(message);
+                log("发送指令 -> " + cmd);
+            } else {
+                alert("尚未连接至 MQTT 服务器！");
+            }
+        }
+    </script>
+</body>
+</html>
